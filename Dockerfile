@@ -1,26 +1,23 @@
-# Этап 1: Сборка JAR
+# 1. Этап сборки
 FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
 
-# Копируем Maven wrapper и pom.xml
+# Копируем wrapper и pom.xml
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw
 
-# Скачиваем зависимости (кэширование слоев)
-RUN ./mvnw dependency:go-offline -B
-
-# Копируем исходники и собираем проект без прогона тестов (чтобы не требовать ключей на этапе сборки)
+# Копируем исходный код
 COPY src ./src
+
+# Собираем JAR без тестов
 RUN ./mvnw clean package -DskipTests -B
 
-# Этап 2: Финальный образ для запуска
+# 2. Этап запуска
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Создаем папку для локальной БД
 RUN mkdir -p /app/data
-
 COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
