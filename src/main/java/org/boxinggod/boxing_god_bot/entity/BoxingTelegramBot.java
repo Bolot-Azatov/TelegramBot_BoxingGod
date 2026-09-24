@@ -1,9 +1,7 @@
 package org.boxinggod.boxing_god_bot.entity;
 
 import lombok.extern.slf4j.Slf4j;
-import org.boxinggod.boxing_god_bot.BoxingFightService;
-import org.boxinggod.boxing_god_bot.entity.AppUser;
-import org.boxinggod.boxing_god_bot.entity.CustomBoxer;
+import org.boxinggod.boxing_god_bot.service.BoxingFightService;
 import org.boxinggod.boxing_god_bot.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
