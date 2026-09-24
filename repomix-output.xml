@@ -1,0 +1,1776 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.mvn/
+  wrapper/
+    maven-wrapper.properties
+src/
+  main/
+    java/
+      org/
+        boxinggod/
+          boxing_god_bot/
+            config/
+              TelegramBotConfig.java
+            controller/
+              FightTestController.java
+            entity/
+              AppUser.java
+              BoxingTelegramBot.java
+              CustomBoxer.java
+              FightHistory.java
+            repository/
+              CustomBoxerRepository.java
+              FightHistoryRepository.java
+              UserRepository.java
+            service/
+              BoxingFightService.java
+              UserService.java
+            BoxingGodBotApplication.java
+    resources/
+      application.yaml
+  test/
+    java/
+      org/
+        boxinggod/
+          boxing_god_bot/
+            BoxingGodBotApplicationTests.java
+.gitattributes
+.gitignore
+mvnw
+mvnw.cmd
+pom.xml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".mvn/wrapper/maven-wrapper.properties">
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/config/TelegramBotConfig.java">
+package org.boxinggod.boxing_god_bot.config;
+
+import org.boxinggod.boxing_god_bot.entity.BoxingTelegramBot;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.telegram.telegrambots.meta.TelegramBotsApi;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
+
+@Configuration
+public class TelegramBotConfig {
+
+    @Bean
+    public TelegramBotsApi telegramBotsApi(BoxingTelegramBot bot) throws TelegramApiException {
+        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
+        botsApi.registerBot(bot);
+        return botsApi;
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/controller/FightTestController.java">
+package org.boxinggod.boxing_god_bot.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.boxinggod.boxing_god_bot.BoxingFightService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/fight")
+@RequiredArgsConstructor
+public class FightTestController {
+
+    private final BoxingFightService fightService;
+
+    @GetMapping
+    public String simulate(
+            @RequestParam(defaultValue = "Майк Тайсон") String boxer1,
+            @RequestParam(defaultValue = "Мухаммед Али") String boxer2
+    ) {
+        return fightService.simulateFight(boxer1, boxer2);
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/entity/AppUser.java">
+package org.boxinggod.boxing_god_bot.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "app_users")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class AppUser {
+
+    @Id
+    private Long chatId;
+
+    private String username;
+    private String firstName;
+
+    private Long balance;
+
+    private Integer totalFights;
+
+    private LocalDateTime registeredAt;
+
+    @PrePersist
+    public void init() {
+        if (this.balance == null) this.balance = 1000L;
+        if (this.totalFights == null) this.totalFights = 0;
+        this.registeredAt = LocalDateTime.now();
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/entity/BoxingTelegramBot.java">
+package org.boxinggod.boxing_god_bot.entity;
+
+import lombok.extern.slf4j.Slf4j;
+import org.boxinggod.boxing_god_bot.BoxingFightService;
+import org.boxinggod.boxing_god_bot.entity.AppUser;
+import org.boxinggod.boxing_god_bot.entity.CustomBoxer;
+import org.boxinggod.boxing_god_bot.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Slf4j
+@Component
+public class BoxingTelegramBot extends TelegramLongPollingBot {
+
+    private final String botName;
+    private final BoxingFightService fightService;
+    private final UserService userService;
+    private final Random random = new Random();
+
+    // Хранилище ID сообщений для очистки чата
+    private final Map<Long, List<Integer>> messageHistory = new ConcurrentHashMap<>();
+
+    private final Map<Long, String> lastFights = new ConcurrentHashMap<>();
+    private final Map<Long, String[]> pendingBets = new ConcurrentHashMap<>();
+
+    // Огромный пул мировых легенд разных эпох и весовых категорий
+    private final List<String> allLegends = List.of(
+            // === СОВРЕМЕННАЯ ЭПОХА И 2010-е ===
+            "Александр Усик", "Тайсон Фьюри", "Энтони Джошуа", "Деонтей Уайлдер",
+            "Дмитрий Бивол", "Артур Бетербиев", "Сауль Альварес", "Геннадий Головкин",
+            "Теренс Кроуфорд", "Эррол Спенс", "Наоя Иноуэ", "Василий Ломаченко",
+            "Джервонта Дэвис", "Шакур Стивенсон", "Девин Хейни", "Теофимо Лопес",
+            "Джарон Эннис", "Сергей Ковалев", "Давид Бенавидес", "Джермелл Чарло",
+            "Джермалл Чарло", "Роман Гонсалес", "Хуан Франсиско Эстрада", "Срисакет Сор Рунгвисаи",
+            "Кит Турман", "Дэнни Гарсия", "Шон Портер", "Крис Юбенк-младший",
+            "Каллум Смит", "Джозеф Паркер", "Чжан Чжилей", "Даниэль Дюбуа",
+
+            // === ЭПОХА 2000-х (2000–2010) ===
+            "Флойд Мейвезер", "Мэнни Пакьяо", "Виталий Кличко", "Владимир Кличко",
+            "Джо Кальзаге", "Бернард Хопкинс", "Шейн Мосли", "Хуан Мануэль Маркес",
+            "Марко Антонио Баррера", "Эрик Моралес", "Мигель Котто", "Рикки Хаттон",
+            "Костя Цзю", "Заб Джуда", "Вернон Форрест", "Крис Бёрд",
+            "Хасим Рахман", "Олег Маскаев", "Николай Валуев", "Султан Ибрагимов",
+            "Руслан Чагаев", "Антонио Маргарито", "Келли Павлик", "Джермейн Тейлор",
+            "Артур Абрахам", "Миккель Кесслер", "Карл Фроч", "Андре Уорд",
+            "Тимоти Брэдли", "Амир Хан", "Нонито Донэйр", "Серхио Мартинес",
+
+            // === ЭПОХА 1990-х ===
+            "Майк Тайсон", "Эвандер Холифилд", "Леннокс Льюис", "Рой Джонс",
+            "Риддик Боу", "Джеймс Тони", "Оскар Де Ла Хойя", "Феликс Тринидад",
+            "Насим Хамед", "Артуро Гатти", "Микки Уорд", "Пернелл Уитакер",
+            "Майкл Мурер", "Рэй Мерсер", "Томми Моррисон", "Дэвид Туа",
+            "Айк Ибеабучи", "Хайме Гарса", "Терри Норрис", "Джулиан Джексон",
+            "Джеральд Макклеллан", "Найджел Бенн", "Крис Юбенк-старший", "Стив Коллинз",
+            "Майкл Карбахаль", "Умберто Гонсалес", "Рикардо Лопес", "Марк Джонсон",
+
+            // === ЭПОХА 1970–1980-х («Четыре Короля» и Золотая Эра) ===
+            "Мухаммед Али", "Джордж Форман", "Джо Фрейзер", "Ларри Холмс",
+            "Кен Нортон", "Шугар Рэй Леонард", "Роберто Дюран", "Томас Хирнс",
+            "Марвин Хаглер", "Хулио Сезар Чавес", "Алексис Аргуэльо", "Аарон Прайор",
+            "Сальвадор Санчес", "Уилфред Бенитес", "Уилфредо Гомес", "Эктор Камачо",
+            "Эрни Шейверс", "Рон Лайл", "Джерри Кури", "Майкл Спинкс",
+            "Леон Спинкс", "Джерри Куни", "Тим Уизерспун", "Грег Пейдж",
+            "Пинки Пинлон", "Карлос Монсон", "Хосе Наполес", "Эдер Жофре",
+            "Рубен Оливарес", "Бобби Чакон", "Дэнни Лопес", "Эйсебио Педроса",
+
+            // === ЭПОХА 1950–1960-х ===
+            "Сонни Листон", "Флойд Паттерсон", "Ингемар Юханссон", "Шугар Рэй Робинсон",
+            "Арчи Мур", "Джин Фуллмер", "Кармен Базилио", "Эмиль Гриффит",
+            "Нино Бенвенути", "Дик Тайгер", "Джо Браун", "Карлос Ортис",
+            "Файтинг Харада", "Боб Фостер", "Хосе Торрес", "Кливленд Уильямс",
+
+            // === ЭПОХА 1920–1940-х (Исторические Иконы) ===
+            "Джо Луис", "Рокки Марчиано", "Генри Армстронг", "Джек Демпси",
+            "Джин Танни", "Макс Шмелинг", "Макс Бэр", "Джеймс Брэддок",
+            "Билли Конн", "Джерси Джо Уолкотт", "Эззард Чарльз", "Сэнди Саддлер",
+            "Тони Зейл", "Рокки Грациано", "Джейк Ламотта", "Барни Росс",
+            "Кид Гавилан", "Бенни Леонард", "Микки Уокер", "Гарри Греб"
+    );
+
+    public BoxingTelegramBot(
+            @Value("${bot.token}") String botToken,
+            @Value("${bot.name}") String botName,
+            BoxingFightService fightService,
+            UserService userService) {
+        super(botToken);
+        this.botName = botName;
+        this.fightService = fightService;
+        this.userService = userService;
+    }
+
+    @Override
+    public String getBotUsername() {
+        return botName;
+    }
+
+    @Override
+    public void onUpdateReceived(Update update) {
+        if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update);
+            return;
+        }
+
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            // Запоминаем сообщение пользователя для возможности очистки
+            trackMessage(update.getMessage().getChatId(), update.getMessage().getMessageId());
+            handleTextMessage(update);
+        }
+    }
+
+    private void handleTextMessage(Update update) {
+        String userText = update.getMessage().getText().trim();
+        long chatId = update.getMessage().getChatId();
+        String username = update.getMessage().getFrom().getUserName();
+        String firstName = update.getMessage().getFrom().getFirstName();
+
+        AppUser user = userService.getOrCreateUser(chatId, username, firstName);
+
+        if (userText.equalsIgnoreCase("/start") || userText.equals("ℹ️ Инструкция")) {
+            sendMainMenu(chatId, """
+                🥊 **Добро пожаловать в Боксерский AI-Симулятор!**
+                
+                💰 Твой баланс: **1000 стартовых монет**!
+                
+                📌 **Возможности:**
+                • **«🥊 Мой боксер»** — управляй бойцом и вызывай на бой любых легенд!
+                • **«🎰 Сделать ставку»** — делай прогноз на бой и удваивай монеты.
+                • **«🎲 Случайный бой»** — мгновенная симуляция боя легенд.
+                • **«🧹 Очистить чат»** — удалить историю сообщений и навести порядок.
+                """);
+            return;
+        }
+
+        if (userText.equals("🧹 Очистить чат")) {
+            clearChat(chatId, update.getMessage().getMessageId());
+            return;
+        }
+
+        if (userText.equals("🥊 Мой боксер")) {
+            var boxerOpt = userService.getCustomBoxer(chatId);
+            if (boxerOpt.isEmpty()) {
+                var newBoxer = userService.createDefaultBoxer(chatId, firstName + " 'Громобой'");
+                sendBoxerProfile(chatId, newBoxer);
+            } else {
+                sendBoxerProfile(chatId, boxerOpt.get());
+            }
+            return;
+        }
+
+        if (userText.equals("👤 Мой профиль")) {
+            String profileText = String.format("""
+                👤 **Профиль игрока:** %s
+                
+                💰 **Баланс монет:** `%d` 🪙
+                🥊 **Проведено боев:** `%d`
+                """,
+                    user.getFirstName(), user.getBalance(), user.getTotalFights());
+            sendSimpleText(chatId, profileText);
+            return;
+        }
+
+        if (userText.equals("🎰 Сделать ставку")) {
+            prepareBetFight(chatId);
+            return;
+        }
+
+        if (userText.equals("🎲 Случайный бой")) {
+            triggerRandomFight(chatId);
+            return;
+        }
+
+        if (userText.equals("🔥 Топ дуэлей")) {
+            sendTopFightsList(chatId);
+            return;
+        }
+
+        // Парсинг произвольной пары
+        String lower = userText.toLowerCase();
+        String delimiter = lower.contains(" vs ") ? " vs " :
+                lower.contains(" против ") ? " против " : null;
+
+        if (delimiter != null) {
+            String[] boxers = userText.split("(?i)" + delimiter);
+            if (boxers.length == 2) {
+                runSimulation(chatId, boxers[0].trim(), boxers[1].trim(), null);
+                return;
+            }
+        }
+
+        sendSimpleText(chatId, "⚠️ Введите пару в формате `Боксер 1 vs Боксер 2` или выберите действие в меню.");
+    }
+
+    private void sendBoxerProfile(long chatId, CustomBoxer boxer) {
+        String text = String.format("""
+            🥊 **ВАШ БОКСЕР:** %s
+            
+            📊 **Характеристики:**
+            • 💥 Сила: `%d/100` | ⚡ Скорость: `%d/100`
+            • 🫁 Кардио: `%d/100` | 🗿 Челюсть: `%d/100`
+            • 🧠 Ринг-IQ: `%d/100`
+            
+            🏆 **Рекорд:** `%d-%d` (Побед/Поражений)
+            
+            🔥 **Выберите легендарного соперника для поединка:**
+            """,
+                boxer.getName(),
+                boxer.getPower(), boxer.getSpeed(), boxer.getStamina(), boxer.getChin(), boxer.getRingIq(),
+                boxer.getWins(), boxer.getLosses()
+        );
+
+        // Выбираем 3 случайных уникальных соперника
+        List<String> opponents = getRandomLegends(3);
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        for (String opponent : opponents) {
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            InlineKeyboardButton btn = new InlineKeyboardButton();
+            btn.setText("⚔️ Вызвать: " + opponent);
+            btn.setCallbackData("CUSTOM_FIGHT:" + opponent);
+            row.add(btn);
+            rows.add(row);
+        }
+
+        // Кнопка обновления списка соперников
+        List<InlineKeyboardButton> refreshRow = new ArrayList<>();
+        InlineKeyboardButton refreshBtn = new InlineKeyboardButton();
+        refreshBtn.setText("🔄 Другие соперники");
+        refreshBtn.setCallbackData("REFRESH_OPPONENTS");
+        refreshRow.add(refreshBtn);
+        rows.add(refreshRow);
+
+        markup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.enableMarkdown(true);
+        message.setReplyMarkup(markup);
+
+        executeAndTrack(message, chatId);
+    }
+
+    private List<String> getRandomLegends(int count) {
+        List<String> shuffled = new ArrayList<>(allLegends);
+        Collections.shuffle(shuffled);
+        return shuffled.subList(0, Math.min(count, shuffled.size()));
+    }
+
+    private void prepareBetFight(long chatId) {
+        // Случайная пара легенд
+        List<String> pair = getRandomLegends(2);
+        String b1 = pair.get(0);
+        String b2 = pair.get(1);
+
+        pendingBets.put(chatId, new String[]{b1, b2});
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        InlineKeyboardButton btn1 = new InlineKeyboardButton();
+        btn1.setText("🥊 " + b1 + " (100 🪙)");
+        btn1.setCallbackData("BET_1");
+        row1.add(btn1);
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        InlineKeyboardButton btn2 = new InlineKeyboardButton();
+        btn2.setText("🥊 " + b2 + " (100 🪙)");
+        btn2.setCallbackData("BET_2");
+        row2.add(btn2);
+
+        rows.add(row1);
+        rows.add(row2);
+        markup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(String.format("🎰 **Арена Ставок**\n\nПара: **%s** 🆚 **%s**\nСтавка: **100 монет**\n\nВыбери своего победителя:", b1, b2));
+        message.enableMarkdown(true);
+        message.setReplyMarkup(markup);
+
+        executeAndTrack(message, chatId);
+    }
+
+    private void handleCallbackQuery(Update update) {
+        String data = update.getCallbackQuery().getData();
+        long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+        if (data.equals("REFRESH_OPPONENTS")) {
+            userService.getCustomBoxer(chatId).ifPresent(boxer -> sendBoxerProfile(chatId, boxer));
+            return;
+        }
+
+        if (data.startsWith("CUSTOM_FIGHT:")) {
+            String legendName = data.replace("CUSTOM_FIGHT:", "");
+            var boxerOpt = userService.getCustomBoxer(chatId);
+            if (boxerOpt.isPresent()) {
+                var myBoxer = boxerOpt.get();
+                sendSimpleText(chatId, "⏳ *Твой боец " + myBoxer.getName() + " выходит в ринг против " + legendName + "...*");
+                try {
+                    String analysis = fightService.simulateCustomFight(myBoxer, legendName);
+                    boolean won = isUserWinner(analysis, myBoxer.getName());
+                    userService.recordCustomFightResult(chatId, won);
+
+                    sendFightResultWithButtons(chatId, analysis);
+
+                    if (won) {
+                        long balance = userService.awardWin(chatId, 500L);
+                        sendSimpleText(chatId, "🏆 **СЕНСАЦИЯ!** Твой боксер победил легенду!\n💰 Награда: **+500 монет** | Баланс: `" + balance + "` 🪙");
+                    } else {
+                        sendSimpleText(chatId, "🥊 Легенда оказалась сильнее. Твой боец получил ценный опыт!");
+                    }
+                } catch (Exception e) {
+                    log.error("Ошибка боя с кастомным боксером", e);
+                }
+            }
+            return;
+        }
+
+        if (data.startsWith("BET_")) {
+            String[] pair = pendingBets.get(chatId);
+            if (pair == null) {
+                sendSimpleText(chatId, "⚠️ Время ставки истекло. Нажмите «🎰 Сделать ставку» заново.");
+                return;
+            }
+
+            String chosenBoxer = data.equals("BET_1") ? pair[0] : pair[1];
+            long betAmount = 100L;
+
+            if (!userService.placeBet(chatId, betAmount)) {
+                sendSimpleText(chatId, "❌ У вас недостаточно монет для ставки! Ваш баланс меньше 100 🪙.");
+                return;
+            }
+
+            sendSimpleText(chatId, String.format("✅ Ставка принята: **100 монет** на победу **%s**!\n\n⏳ *Бойцы выходят на ринг, симулируем поединок...*", chosenBoxer));
+            runSimulation(chatId, pair[0], pair[1], chosenBoxer);
+            return;
+        }
+
+        if (data.equals("REMATCH")) {
+            String lastPair = lastFights.get(chatId);
+            if (lastPair != null) {
+                String[] boxers = lastPair.split(" vs ");
+                sendSimpleText(chatId, "🔄 *Запускаем реванш...*");
+                runSimulation(chatId, boxers[0], boxers[1], null);
+            }
+        } else if (data.equals("RANDOM_FIGHT")) {
+            triggerRandomFight(chatId);
+        }
+    }
+
+    private void triggerRandomFight(long chatId) {
+        List<String> pair = getRandomLegends(2);
+        runSimulation(chatId, pair.get(0), pair.get(1), null);
+    }
+
+    private void runSimulation(long chatId, String boxer1, String boxer2, String chosenBoxer) {
+        lastFights.put(chatId, boxer1 + " vs " + boxer2);
+
+        try {
+            String analysis = fightService.simulateFight(boxer1, boxer2);
+            userService.recordFight(chatId, boxer1, boxer2, analysis);
+
+            sendFightResultWithButtons(chatId, analysis);
+
+            if (chosenBoxer != null) {
+                boolean won = isUserWinner(analysis, chosenBoxer);
+                if (won) {
+                    long newBalance = userService.awardWin(chatId, 200L);
+                    sendSimpleText(chatId, String.format("🎉 **ПОБЕДА!** Твой боксер **%s** выиграл бой!\n💰 Выигрыш: **+200 монет** | Баланс: `%d` 🪙", chosenBoxer, newBalance));
+                } else {
+                    long currentBalance = userService.getBalance(chatId);
+                    sendSimpleText(chatId, String.format("😢 **ПРОИГРЫШ!** Твой боксер уступил победу.\n💰 Потеряно: 100 монет | Баланс: `%d` 🪙", currentBalance));
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("Ошибка при симуляции", e);
+            sendSimpleText(chatId, "❌ Ошибка при генерации боя: " + e.getMessage());
+        }
+    }
+
+    private boolean isUserWinner(String analysis, String chosenBoxer) {
+        if (analysis == null || chosenBoxer == null) return false;
+
+        for (String line : analysis.split("\n")) {
+            String upper = line.toUpperCase();
+            if (upper.contains("ПОБЕДИТЕЛЬ:") || upper.contains("ПОБЕДИТЕЛЬ :")) {
+                String[] parts = chosenBoxer.trim().split(" ");
+                String lastName = parts[parts.length - 1].toLowerCase();
+                return line.toLowerCase().contains(lastName);
+            }
+        }
+        return false;
+    }
+
+    private void clearChat(long chatId, int currentMessageId) {
+        // Проходимся по последним 60 сообщениям назад и удаляем их
+        for (int i = 0; i < 60; i++) {
+            int msgIdToDelete = currentMessageId - i;
+            try {
+                DeleteMessage deleteMessage = new DeleteMessage();
+                deleteMessage.setChatId(String.valueOf(chatId));
+                deleteMessage.setMessageId(msgIdToDelete);
+                execute(deleteMessage);
+            } catch (Exception ignored) {
+                // Игнорируем ошибки (если сообщение уже удалено или старше 48 часов)
+            }
+        }
+        // Отправляем свежее чистое меню
+        sendMainMenu(chatId, "✨ **Чат полностью очищен!** Выберите действие:");
+    }
+
+    private void trackMessage(long chatId, int messageId) {
+        messageHistory.computeIfAbsent(chatId, k -> Collections.synchronizedList(new ArrayList<>())).add(messageId);
+    }
+
+    private void executeAndTrack(SendMessage message, long chatId) {
+        try {
+            Message sent = execute(message);
+            if (sent != null) {
+                trackMessage(chatId, sent.getMessageId());
+            }
+        } catch (TelegramApiException e) {
+            log.error("Ошибка отправки сообщения", e);
+        }
+    }
+
+    private void sendFightResultWithButtons(long chatId, String text) {
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        InlineKeyboardButton rematchBtn = new InlineKeyboardButton();
+        rematchBtn.setText("🔄 Реванш");
+        rematchBtn.setCallbackData("REMATCH");
+        row1.add(rematchBtn);
+
+        InlineKeyboardButton randomBtn = new InlineKeyboardButton();
+        randomBtn.setText("🎲 Другой бой");
+        randomBtn.setCallbackData("RANDOM_FIGHT");
+        row1.add(randomBtn);
+
+        rows.add(row1);
+        markup.setKeyboard(rows);
+
+        sendChunkedMessage(chatId, text, markup);
+    }
+
+    private void sendMainMenu(long chatId, String text) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.enableMarkdown(true);
+
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+        keyboardMarkup.setResizeKeyboard(true);
+        keyboardMarkup.setSelective(true);
+
+        List<KeyboardRow> keyboard = new ArrayList<>();
+
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add(new KeyboardButton("🎰 Сделать ставку"));
+        row1.add(new KeyboardButton("🥊 Мой боксер"));
+
+        KeyboardRow row2 = new KeyboardRow();
+        row2.add(new KeyboardButton("🎲 Случайный бой"));
+        row2.add(new KeyboardButton("👤 Мой профиль"));
+
+        KeyboardRow row3 = new KeyboardRow();
+        row3.add(new KeyboardButton("🔥 Топ дуэлей"));
+        row3.add(new KeyboardButton("🧹 Очистить чат"));
+
+        keyboard.add(row1);
+        keyboard.add(row2);
+        keyboard.add(row3);
+        keyboardMarkup.setKeyboard(keyboard);
+
+        message.setReplyMarkup(keyboardMarkup);
+
+        executeAndTrack(message, chatId);
+    }
+
+    private void sendTopFightsList(long chatId) {
+        StringBuilder sb = new StringBuilder("🔥 **Популярные культовые пары для ввода:**\n\n");
+        sb.append("• `Майк Тайсон vs Мухаммед Али`\n");
+        sb.append("• `Флойд Мейвезер vs Мэнни Пакьяо`\n");
+        sb.append("• `Александр Усик vs Энтони Джошуа`\n");
+        sb.append("• `Артур Бетербиев vs Дмитрий Бивол`\n");
+        sb.append("• `Геннадий Головкин vs Сауль Альварес`\n");
+        sb.append("• `Рой Джонс vs Бернард Хопкинс`\n");
+        sb.append("\n_Скопируйте любую или отправьте собственную через **vs**!_");
+        sendSimpleText(chatId, sb.toString());
+    }
+
+    private void sendSimpleText(long chatId, String text) {
+        sendChunkedMessage(chatId, text, null);
+    }
+
+    private void sendChunkedMessage(long chatId, String text, InlineKeyboardMarkup markup) {
+        if (text == null || text.isBlank()) return;
+
+        final int MAX_LENGTH = 4000;
+        int start = 0;
+
+        while (start < text.length()) {
+            int end = Math.min(start + MAX_LENGTH, text.length());
+
+            if (end < text.length()) {
+                int lastNewLine = text.lastIndexOf("\n", end);
+                if (lastNewLine > start) {
+                    end = lastNewLine;
+                }
+            }
+
+            String chunk = text.substring(start, end).trim();
+            if (!chunk.isEmpty()) {
+                SendMessage message = new SendMessage();
+                message.setChatId(String.valueOf(chatId));
+                message.setText(chunk);
+                message.enableMarkdown(true);
+
+                if (end >= text.length() && markup != null) {
+                    message.setReplyMarkup(markup);
+                }
+
+                try {
+                    Message sent = execute(message);
+                    if (sent != null) {
+                        trackMessage(chatId, sent.getMessageId());
+                    }
+                } catch (TelegramApiException e) {
+                    message.enableMarkdown(false);
+                    try {
+                        Message sent = execute(message);
+                        if (sent != null) {
+                            trackMessage(chatId, sent.getMessageId());
+                        }
+                    } catch (TelegramApiException ex) {
+                        log.error("Ошибка отправки сообщения", ex);
+                    }
+                }
+            }
+            start = end;
+        }
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/entity/CustomBoxer.java">
+package org.boxinggod.boxing_god_bot.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "custom_boxers")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class CustomBoxer {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long chatId; // Привязка к игроку
+
+    private String name;        // Имя бойца (например, "Иван 'Молот' Громов")
+    private String stance;      // Правша / Левша
+    private String style;       // Инфайтер, Аутфайтер, Слаггер, Контрпанчер
+
+    // Характеристики (от 1 до 100)
+    private int power;          // Сила удара
+    private int speed;          // Скорость
+    private int stamina;        // Выносливость
+    private int chin;           // Крепость челюсти
+    private int ringIq;         // Боксерский IQ
+
+    private int wins;           // Побед
+    private int losses;         // Поражений
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/entity/FightHistory.java">
+package org.boxinggod.boxing_god_bot.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "fight_history")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class FightHistory {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long chatId;
+
+    private String boxer1;
+    private String boxer2;
+
+    @Column(columnDefinition = "TEXT")
+    private String simulationResult;
+
+    private LocalDateTime foughtAt;
+
+    @PrePersist
+    public void init() {
+        this.foughtAt = LocalDateTime.now();
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/repository/CustomBoxerRepository.java">
+package org.boxinggod.boxing_god_bot.repository;
+
+import org.boxinggod.boxing_god_bot.entity.CustomBoxer;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface CustomBoxerRepository extends JpaRepository<CustomBoxer, Long> {
+    Optional<CustomBoxer> findByChatId(Long chatId);
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/repository/FightHistoryRepository.java">
+package org.boxinggod.boxing_god_bot.repository;
+
+import org.boxinggod.boxing_god_bot.entity.FightHistory;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface FightHistoryRepository extends JpaRepository<FightHistory, Long> {
+    List<FightHistory> findTop5ByChatIdOrderByFoughtAtDesc(Long chatId);
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/repository/UserRepository.java">
+package org.boxinggod.boxing_god_bot.repository;
+
+import org.boxinggod.boxing_god_bot.entity.AppUser;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface UserRepository extends JpaRepository<AppUser, Long> {
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/service/BoxingFightService.java">
+package org.boxinggod.boxing_god_bot;
+
+import org.boxinggod.boxing_god_bot.entity.CustomBoxer;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Service;
+
+@Service
+public class BoxingFightService {
+
+    private final ChatClient chatClient;
+
+    public BoxingFightService(ChatClient.Builder chatClientBuilder) {
+        this.chatClient = chatClientBuilder.build();
+    }
+
+    public String simulateFight(String boxer1, String boxer2) {
+        String systemPrompt = """
+            Ты — ведущий русскоязычный эксперт и историк профессионального бокса.
+            Твоя задача — провести тактически и исторически точный разбор поединка между бойцами в их АБСОЛЮТНОМ ПИКЕ.
+
+            ЖЕЛЕЗНЫЕ ПРАВИЛА:
+            1. СТОЙКИ БОЙЦОВ:
+               - ПРАВШИ (Orthodox): Роберто Дюран, Шугар Рэй Леонард, Майк Тайсон, Мухаммед Али, Виталий Кличко, Флойд Мейвезер, Сауль Альварес, Геннадий Головкин, Джордж Форман, Артур Бетербиев, Дмитрий Бивол, Энтони Джошуа.
+               - ЛЕВШИ (Southpaw): Мэнни Пакьяо, Александр Усик, Василий Ломаченко, Пернелл Уитакер, Джервонта Дэвис, Марвин Хаглер.
+               - Категорически запрещено путать стойки! У правши джеб ЛЕВОЙ, кросс ПРАВОЙ. У левши джеб ПРАВОЙ, кросс ЛЕВОЙ.
+            2. ОФОРМЛЕНИЕ: Без таблиц! Запрещены англицизмы в скобках. Разделяй текст абзацами.
+
+            СТРУКТУРА:
+            🥊 СОПОСТАВЛЕНИЕ СТИЛЕЙ И ГАБАРИТОВ
+            • [Боксер 1]: Стойка (строго проверь правша/левша), рост/рич, стиль, коронные удары.
+            • [Боксер 2]: Стойка (строго проверь правша/левша), рост/рич, стиль, коронные удары.
+
+            ⚡ ТАКТИЧЕСКАЯ ИНТРИГА
+            (2-3 емких предложения).
+
+            🔥 СЦЕНАРИЙ БОЯ
+            ▪ РАУНДЫ 1–4 (РАЗВЕДКА И ТЕМП)
+            ▪ РАУНДЫ 5–8 (ЭКВАТОР И ТАКТИЧЕСКАЯ БОРЬБА)
+            ▪ РАУНДЫ 9–12 (ЧЕМПИОНСКИЙ ОТРЕЗОК И РАЗВЯЗКА)
+
+            🏆 ИТОГОВЫЙ ВЕРДИКТ
+            • ПОБЕДИТЕЛЬ: [Строго точное имя только одного победителя]
+            • СПОСОБ ПОБЕДЫ: [KO/TKO (раунд) или Решение судей]
+            • ОБОСНОВАНИЕ: [2-3 предложения].
+            """;
+
+        String userPrompt = String.format("Симулируй бой: %s против %s", boxer1, boxer2);
+
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .call()
+                .content();
+    }
+
+    public String simulateCustomFight(CustomBoxer custom, String legendName) {
+        String systemPrompt = """
+        Ты — ведущий русскоязычный эксперт и комментатор профессионального бокса.
+        Твоя задача — смоделировать реалистичный поединок между КАСТОМНЫМ СОЗДАННЫМ БОЙЦОМ и РЕАЛЬНОЙ ЛЕГЕНДОЙ БОКСА в её пике.
+
+        ПРАВИЛА:
+        1. Учитывай точные характеристики созданного бойца (шкала от 1 до 100).
+        2. Сравни их с реальными физическими и тактическими данными легенды.
+        3. Будь объективен: если у кастомного бойца статы выше — он может победить; если ниже — легенда накажет его за ошибки.
+        4. Без таблиц! Чистый русский язык, абзацы, капслок.
+
+        СТРУКТУРА:
+        🥊 СОПОСТАВЛЕНИЕ СТИЛЕЙ
+        • [Имя кастомного бойца]: Статы (Сила, Скорость, Кардио, Подбородок, IQ), стойка, стиль.
+        • [Имя Легенды]: Реальная стойка, габариты, стиль, козыри.
+
+        ⚡ ТАКТИЧЕСКИЙ РАЗБОР
+        (За счет чего новичок может сотворить сенсацию или почему легенда разберет его на классе).
+
+        🔥 СЦЕНАРИЙ БОЯ
+        ▪ РАУНДЫ 1–4 (СТАРТ)
+        ▪ РАУНДЫ 5–8 (ЭКВАТОР)
+        ▪ РАУНДЫ 9–12 (ФИНАЛ)
+
+        🏆 ИТОГОВЫЙ ВЕРДИКТ
+        • ПОБЕДИТЕЛЬ: [Строго точное имя победителя]
+        • СПОСОБ ПОБЕДЫ: [KO/TKO (раунд) или Решение судей]
+        • ОБОСНОВАНИЕ: [2-3 предложения].
+        """;
+
+        String userPrompt = String.format("""
+        Бой: Кастомный боксер '%s' против легенды '%s'.
+        Характеристики %s:
+        - Стойка: %s
+        - Стиль: %s
+        - Сила удара: %d/100
+        - Скорость рук/ног: %d/100
+        - Выносливость: %d/100
+        - Крепость подбородка: %d/100
+        - Ринг-IQ: %d/100
+        """,
+                custom.getName(), legendName, custom.getName(),
+                custom.getStance(), custom.getStyle(),
+                custom.getPower(), custom.getSpeed(), custom.getStamina(), custom.getChin(), custom.getRingIq()
+        );
+
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .call()
+                .content();
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/service/UserService.java">
+package org.boxinggod.boxing_god_bot.service;
+
+import lombok.RequiredArgsConstructor;
+import org.boxinggod.boxing_god_bot.entity.AppUser;
+import org.boxinggod.boxing_god_bot.entity.CustomBoxer;
+import org.boxinggod.boxing_god_bot.entity.FightHistory;
+import org.boxinggod.boxing_god_bot.repository.CustomBoxerRepository;
+import org.boxinggod.boxing_god_bot.repository.FightHistoryRepository;
+import org.boxinggod.boxing_god_bot.repository.UserRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final FightHistoryRepository historyRepository;
+    private final CustomBoxerRepository boxerRepository;
+
+    @Transactional
+    public AppUser getOrCreateUser(Long chatId, String username, String firstName) {
+        return userRepository.findById(chatId).orElseGet(() -> {
+            AppUser newUser = AppUser.builder()
+                    .chatId(chatId)
+                    .username(username)
+                    .firstName(firstName)
+                    .balance(1000L)
+                    .totalFights(0)
+                    .build();
+            return userRepository.save(newUser);
+        });
+    }
+
+    @Transactional
+    public Optional<CustomBoxer> getCustomBoxer(Long chatId) {
+        return boxerRepository.findByChatId(chatId);
+    }
+
+    @Transactional
+    public CustomBoxer createDefaultBoxer(Long chatId, String name) {
+        CustomBoxer boxer = CustomBoxer.builder()
+                .chatId(chatId)
+                .name(name)
+                .stance("Правша")
+                .style("Сбалансированный боксер-панчер")
+                .power(80)
+                .speed(80)
+                .stamina(80)
+                .chin(80)
+                .ringIq(80)
+                .wins(0)
+                .losses(0)
+                .build();
+        return boxerRepository.save(boxer);
+    }
+
+    @Transactional
+    public void recordCustomFightResult(Long chatId, boolean won) {
+        boxerRepository.findByChatId(chatId).ifPresent(boxer -> {
+            if (won) {
+                boxer.setWins(boxer.getWins() + 1);
+            } else {
+                boxer.setLosses(boxer.getLosses() + 1);
+            }
+            boxerRepository.save(boxer);
+        });
+    }
+
+    @Transactional
+    public boolean placeBet(Long chatId, long betAmount) {
+        AppUser user = userRepository.findById(chatId).orElse(null);
+        if (user == null || user.getBalance() < betAmount) {
+            return false;
+        }
+        user.setBalance(user.getBalance() - betAmount);
+        userRepository.save(user);
+        return true;
+    }
+
+    @Transactional
+    public long awardWin(Long chatId, long winAmount) {
+        AppUser user = userRepository.findById(chatId).orElse(null);
+        if (user != null) {
+            user.setBalance(user.getBalance() + winAmount);
+            userRepository.save(user);
+            return user.getBalance();
+        }
+        return 0;
+    }
+
+    @Transactional
+    public long getBalance(Long chatId) {
+        return userRepository.findById(chatId).map(AppUser::getBalance).orElse(0L);
+    }
+
+    @Transactional
+    public void recordFight(Long chatId, String boxer1, String boxer2, String result) {
+        userRepository.findById(chatId).ifPresent(user -> {
+            user.setTotalFights(user.getTotalFights() + 1);
+            userRepository.save(user);
+        });
+
+        FightHistory history = FightHistory.builder()
+                .chatId(chatId)
+                .boxer1(boxer1)
+                .boxer2(boxer2)
+                .simulationResult(result)
+                .build();
+        historyRepository.save(history);
+    }
+}
+</file>
+
+<file path="src/main/java/org/boxinggod/boxing_god_bot/BoxingGodBotApplication.java">
+package org.boxinggod.boxing_god_bot;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class BoxingGodBotApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BoxingGodBotApplication.class, args);
+    }
+
+}
+</file>
+
+<file path="src/test/java/org/boxinggod/boxing_god_bot/BoxingGodBotApplicationTests.java">
+package org.boxinggod.boxing_god_bot;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class BoxingGodBotApplicationTests {
+
+    @Test
+    void contextLoads() {
+    }
+
+}
+</file>
+
+<file path=".gitattributes">
+/mvnw text eol=lf
+*.cmd text eol=crlf
+</file>
+
+<file path=".gitignore">
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+</file>
+
+<file path="mvnw">
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Apache Maven Wrapper startup batch script, version 3.3.4
+#
+# Optional ENV vars
+# -----------------
+#   JAVA_HOME - location of a JDK home dir, required when download maven via java source
+#   MVNW_REPOURL - repo url base for downloading maven distribution
+#   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
+#   MVNW_VERBOSE - true: enable verbose log; debug: trace the mvnw script; others: silence the output
+# ----------------------------------------------------------------------------
+
+set -euf
+[ "${MVNW_VERBOSE-}" != debug ] || set -x
+
+# OS specific support.
+native_path() { printf %s\\n "$1"; }
+case "$(uname)" in
+CYGWIN* | MINGW*)
+  [ -z "${JAVA_HOME-}" ] || JAVA_HOME="$(cygpath --unix "$JAVA_HOME")"
+  native_path() { cygpath --path --windows "$1"; }
+  ;;
+esac
+
+# set JAVACMD and JAVACCMD
+set_java_home() {
+  # For Cygwin and MinGW, ensure paths are in Unix format before anything is touched
+  if [ -n "${JAVA_HOME-}" ]; then
+    if [ -x "$JAVA_HOME/jre/sh/java" ]; then
+      # IBM's JDK on AIX uses strange locations for the executables
+      JAVACMD="$JAVA_HOME/jre/sh/java"
+      JAVACCMD="$JAVA_HOME/jre/sh/javac"
+    else
+      JAVACMD="$JAVA_HOME/bin/java"
+      JAVACCMD="$JAVA_HOME/bin/javac"
+
+      if [ ! -x "$JAVACMD" ] || [ ! -x "$JAVACCMD" ]; then
+        echo "The JAVA_HOME environment variable is not defined correctly, so mvnw cannot run." >&2
+        echo "JAVA_HOME is set to \"$JAVA_HOME\", but \"\$JAVA_HOME/bin/java\" or \"\$JAVA_HOME/bin/javac\" does not exist." >&2
+        return 1
+      fi
+    fi
+  else
+    JAVACMD="$(
+      'set' +e
+      'unset' -f command 2>/dev/null
+      'command' -v java
+    )" || :
+    JAVACCMD="$(
+      'set' +e
+      'unset' -f command 2>/dev/null
+      'command' -v javac
+    )" || :
+
+    if [ ! -x "${JAVACMD-}" ] || [ ! -x "${JAVACCMD-}" ]; then
+      echo "The java/javac command does not exist in PATH nor is JAVA_HOME set, so mvnw cannot run." >&2
+      return 1
+    fi
+  fi
+}
+
+# hash string like Java String::hashCode
+hash_string() {
+  str="${1:-}" h=0
+  while [ -n "$str" ]; do
+    char="${str%"${str#?}"}"
+    h=$(((h * 31 + $(LC_CTYPE=C printf %d "'$char")) % 4294967296))
+    str="${str#?}"
+  done
+  printf %x\\n $h
+}
+
+verbose() { :; }
+[ "${MVNW_VERBOSE-}" != true ] || verbose() { printf %s\\n "${1-}"; }
+
+die() {
+  printf %s\\n "$1" >&2
+  exit 1
+}
+
+trim() {
+  # MWRAPPER-139:
+  #   Trims trailing and leading whitespace, carriage returns, tabs, and linefeeds.
+  #   Needed for removing poorly interpreted newline sequences when running in more
+  #   exotic environments such as mingw bash on Windows.
+  printf "%s" "${1}" | tr -d '[:space:]'
+}
+
+scriptDir="$(dirname "$0")"
+scriptName="$(basename "$0")"
+
+# parse distributionUrl and optional distributionSha256Sum, requires .mvn/wrapper/maven-wrapper.properties
+while IFS="=" read -r key value; do
+  case "${key-}" in
+  distributionUrl) distributionUrl=$(trim "${value-}") ;;
+  distributionSha256Sum) distributionSha256Sum=$(trim "${value-}") ;;
+  esac
+done <"$scriptDir/.mvn/wrapper/maven-wrapper.properties"
+[ -n "${distributionUrl-}" ] || die "cannot read distributionUrl property in $scriptDir/.mvn/wrapper/maven-wrapper.properties"
+
+case "${distributionUrl##*/}" in
+maven-mvnd-*bin.*)
+  MVN_CMD=mvnd.sh _MVNW_REPO_PATTERN=/maven/mvnd/
+  case "${PROCESSOR_ARCHITECTURE-}${PROCESSOR_ARCHITEW6432-}:$(uname -a)" in
+  *AMD64:CYGWIN* | *AMD64:MINGW*) distributionPlatform=windows-amd64 ;;
+  :Darwin*x86_64) distributionPlatform=darwin-amd64 ;;
+  :Darwin*arm64) distributionPlatform=darwin-aarch64 ;;
+  :Linux*x86_64*) distributionPlatform=linux-amd64 ;;
+  *)
+    echo "Cannot detect native platform for mvnd on $(uname)-$(uname -m), use pure java version" >&2
+    distributionPlatform=linux-amd64
+    ;;
+  esac
+  distributionUrl="${distributionUrl%-bin.*}-$distributionPlatform.zip"
+  ;;
+maven-mvnd-*) MVN_CMD=mvnd.sh _MVNW_REPO_PATTERN=/maven/mvnd/ ;;
+*) MVN_CMD="mvn${scriptName#mvnw}" _MVNW_REPO_PATTERN=/org/apache/maven/ ;;
+esac
+
+# apply MVNW_REPOURL and calculate MAVEN_HOME
+# maven home pattern: ~/.m2/wrapper/dists/{apache-maven-<version>,maven-mvnd-<version>-<platform>}/<hash>
+[ -z "${MVNW_REPOURL-}" ] || distributionUrl="$MVNW_REPOURL$_MVNW_REPO_PATTERN${distributionUrl#*"$_MVNW_REPO_PATTERN"}"
+distributionUrlName="${distributionUrl##*/}"
+distributionUrlNameMain="${distributionUrlName%.*}"
+distributionUrlNameMain="${distributionUrlNameMain%-bin}"
+MAVEN_USER_HOME="${MAVEN_USER_HOME:-${HOME}/.m2}"
+MAVEN_HOME="${MAVEN_USER_HOME}/wrapper/dists/${distributionUrlNameMain-}/$(hash_string "$distributionUrl")"
+
+exec_maven() {
+  unset MVNW_VERBOSE MVNW_USERNAME MVNW_PASSWORD MVNW_REPOURL || :
+  exec "$MAVEN_HOME/bin/$MVN_CMD" "$@" || die "cannot exec $MAVEN_HOME/bin/$MVN_CMD"
+}
+
+if [ -d "$MAVEN_HOME" ]; then
+  verbose "found existing MAVEN_HOME at $MAVEN_HOME"
+  exec_maven "$@"
+fi
+
+case "${distributionUrl-}" in
+*?-bin.zip | *?maven-mvnd-?*-?*.zip) ;;
+*) die "distributionUrl is not valid, must match *-bin.zip or maven-mvnd-*.zip, but found '${distributionUrl-}'" ;;
+esac
+
+# prepare tmp dir
+if TMP_DOWNLOAD_DIR="$(mktemp -d)" && [ -d "$TMP_DOWNLOAD_DIR" ]; then
+  clean() { rm -rf -- "$TMP_DOWNLOAD_DIR"; }
+  trap clean HUP INT TERM EXIT
+else
+  die "cannot create temp dir"
+fi
+
+mkdir -p -- "${MAVEN_HOME%/*}"
+
+# Download and Install Apache Maven
+verbose "Couldn't find MAVEN_HOME, downloading and installing it ..."
+verbose "Downloading from: $distributionUrl"
+verbose "Downloading to: $TMP_DOWNLOAD_DIR/$distributionUrlName"
+
+# select .zip or .tar.gz
+if ! command -v unzip >/dev/null; then
+  distributionUrl="${distributionUrl%.zip}.tar.gz"
+  distributionUrlName="${distributionUrl##*/}"
+fi
+
+# verbose opt
+__MVNW_QUIET_WGET=--quiet __MVNW_QUIET_CURL=--silent __MVNW_QUIET_UNZIP=-q __MVNW_QUIET_TAR=''
+[ "${MVNW_VERBOSE-}" != true ] || __MVNW_QUIET_WGET='' __MVNW_QUIET_CURL='' __MVNW_QUIET_UNZIP='' __MVNW_QUIET_TAR=v
+
+# normalize http auth
+case "${MVNW_PASSWORD:+has-password}" in
+'') MVNW_USERNAME='' MVNW_PASSWORD='' ;;
+has-password) [ -n "${MVNW_USERNAME-}" ] || MVNW_USERNAME='' MVNW_PASSWORD='' ;;
+esac
+
+if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
+  verbose "Found wget ... using wget"
+  wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget: Failed to fetch $distributionUrl"
+elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
+  verbose "Found curl ... using curl"
+  curl ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl: Failed to fetch $distributionUrl"
+elif set_java_home; then
+  verbose "Falling back to use Java to download"
+  javaSource="$TMP_DOWNLOAD_DIR/Downloader.java"
+  targetZip="$TMP_DOWNLOAD_DIR/$distributionUrlName"
+  cat >"$javaSource" <<-END
+	public class Downloader extends java.net.Authenticator
+	{
+	  protected java.net.PasswordAuthentication getPasswordAuthentication()
+	  {
+	    return new java.net.PasswordAuthentication( System.getenv( "MVNW_USERNAME" ), System.getenv( "MVNW_PASSWORD" ).toCharArray() );
+	  }
+	  public static void main( String[] args ) throws Exception
+	  {
+	    setDefault( new Downloader() );
+	    java.nio.file.Files.copy( java.net.URI.create( args[0] ).toURL().openStream(), java.nio.file.Paths.get( args[1] ).toAbsolutePath().normalize() );
+	  }
+	}
+	END
+  # For Cygwin/MinGW, switch paths to Windows format before running javac and java
+  verbose " - Compiling Downloader.java ..."
+  "$(native_path "$JAVACCMD")" "$(native_path "$javaSource")" || die "Failed to compile Downloader.java"
+  verbose " - Running Downloader.java ..."
+  "$(native_path "$JAVACMD")" -cp "$(native_path "$TMP_DOWNLOAD_DIR")" Downloader "$distributionUrl" "$(native_path "$targetZip")"
+fi
+
+# If specified, validate the SHA-256 sum of the Maven distribution zip file
+if [ -n "${distributionSha256Sum-}" ]; then
+  distributionSha256Result=false
+  if [ "$MVN_CMD" = mvnd.sh ]; then
+    echo "Checksum validation is not supported for maven-mvnd." >&2
+    echo "Please disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties." >&2
+    exit 1
+  elif command -v sha256sum >/dev/null; then
+    if echo "$distributionSha256Sum  $TMP_DOWNLOAD_DIR/$distributionUrlName" | sha256sum -c - >/dev/null 2>&1; then
+      distributionSha256Result=true
+    fi
+  elif command -v shasum >/dev/null; then
+    if echo "$distributionSha256Sum  $TMP_DOWNLOAD_DIR/$distributionUrlName" | shasum -a 256 -c >/dev/null 2>&1; then
+      distributionSha256Result=true
+    fi
+  else
+    echo "Checksum validation was requested but neither 'sha256sum' or 'shasum' are available." >&2
+    echo "Please install either command, or disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties." >&2
+    exit 1
+  fi
+  if [ $distributionSha256Result = false ]; then
+    echo "Error: Failed to validate Maven distribution SHA-256, your Maven distribution might be compromised." >&2
+    echo "If you updated your Maven version, you need to update the specified distributionSha256Sum property." >&2
+    exit 1
+  fi
+fi
+
+# unzip and move
+if command -v unzip >/dev/null; then
+  unzip ${__MVNW_QUIET_UNZIP:+"$__MVNW_QUIET_UNZIP"} "$TMP_DOWNLOAD_DIR/$distributionUrlName" -d "$TMP_DOWNLOAD_DIR" || die "failed to unzip"
+else
+  tar xzf${__MVNW_QUIET_TAR:+"$__MVNW_QUIET_TAR"} "$TMP_DOWNLOAD_DIR/$distributionUrlName" -C "$TMP_DOWNLOAD_DIR" || die "failed to untar"
+fi
+
+# Find the actual extracted directory name (handles snapshots where filename != directory name)
+actualDistributionDir=""
+
+# First try the expected directory name (for regular distributions)
+if [ -d "$TMP_DOWNLOAD_DIR/$distributionUrlNameMain" ]; then
+  if [ -f "$TMP_DOWNLOAD_DIR/$distributionUrlNameMain/bin/$MVN_CMD" ]; then
+    actualDistributionDir="$distributionUrlNameMain"
+  fi
+fi
+
+# If not found, search for any directory with the Maven executable (for snapshots)
+if [ -z "$actualDistributionDir" ]; then
+  # enable globbing to iterate over items
+  set +f
+  for dir in "$TMP_DOWNLOAD_DIR"/*; do
+    if [ -d "$dir" ]; then
+      if [ -f "$dir/bin/$MVN_CMD" ]; then
+        actualDistributionDir="$(basename "$dir")"
+        break
+      fi
+    fi
+  done
+  set -f
+fi
+
+if [ -z "$actualDistributionDir" ]; then
+  verbose "Contents of $TMP_DOWNLOAD_DIR:"
+  verbose "$(ls -la "$TMP_DOWNLOAD_DIR")"
+  die "Could not find Maven distribution directory in extracted archive"
+fi
+
+verbose "Found extracted Maven distribution directory: $actualDistributionDir"
+printf %s\\n "$distributionUrl" >"$TMP_DOWNLOAD_DIR/$actualDistributionDir/mvnw.url"
+mv -- "$TMP_DOWNLOAD_DIR/$actualDistributionDir" "$MAVEN_HOME" || [ -d "$MAVEN_HOME" ] || die "fail to move MAVEN_HOME"
+
+clean || :
+exec_maven "$@"
+</file>
+
+<file path="mvnw.cmd">
+<# : batch portion
+@REM ----------------------------------------------------------------------------
+@REM Licensed to the Apache Software Foundation (ASF) under one
+@REM or more contributor license agreements.  See the NOTICE file
+@REM distributed with this work for additional information
+@REM regarding copyright ownership.  The ASF licenses this file
+@REM to you under the Apache License, Version 2.0 (the
+@REM "License"); you may not use this file except in compliance
+@REM with the License.  You may obtain a copy of the License at
+@REM
+@REM    http://www.apache.org/licenses/LICENSE-2.0
+@REM
+@REM Unless required by applicable law or agreed to in writing,
+@REM software distributed under the License is distributed on an
+@REM "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+@REM KIND, either express or implied.  See the License for the
+@REM specific language governing permissions and limitations
+@REM under the License.
+@REM ----------------------------------------------------------------------------
+
+@REM ----------------------------------------------------------------------------
+@REM Apache Maven Wrapper startup batch script, version 3.3.4
+@REM
+@REM Optional ENV vars
+@REM   MVNW_REPOURL - repo url base for downloading maven distribution
+@REM   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
+@REM   MVNW_VERBOSE - true: enable verbose log; others: silence the output
+@REM ----------------------------------------------------------------------------
+
+@IF "%__MVNW_ARG0_NAME__%"=="" (SET __MVNW_ARG0_NAME__=%~nx0)
+@SET __MVNW_CMD__=
+@SET __MVNW_ERROR__=
+@SET __MVNW_PSMODULEP_SAVE=%PSModulePath%
+@SET PSModulePath=
+@FOR /F "usebackq tokens=1* delims==" %%A IN (`powershell -noprofile "& {$scriptDir='%~dp0'; $script='%__MVNW_ARG0_NAME__%'; icm -ScriptBlock ([Scriptblock]::Create((Get-Content -Raw '%~f0'))) -NoNewScope}"`) DO @(
+  IF "%%A"=="MVN_CMD" (set __MVNW_CMD__=%%B) ELSE IF "%%B"=="" (echo %%A) ELSE (echo %%A=%%B)
+)
+@SET PSModulePath=%__MVNW_PSMODULEP_SAVE%
+@SET __MVNW_PSMODULEP_SAVE=
+@SET __MVNW_ARG0_NAME__=
+@SET MVNW_USERNAME=
+@SET MVNW_PASSWORD=
+@IF NOT "%__MVNW_CMD__%"=="" ("%__MVNW_CMD__%" %*)
+@echo Cannot start maven from wrapper >&2 && exit /b 1
+@GOTO :EOF
+: end batch / begin powershell #>
+
+$ErrorActionPreference = "Stop"
+if ($env:MVNW_VERBOSE -eq "true") {
+  $VerbosePreference = "Continue"
+}
+
+# calculate distributionUrl, requires .mvn/wrapper/maven-wrapper.properties
+$distributionUrl = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionUrl
+if (!$distributionUrl) {
+  Write-Error "cannot read distributionUrl property in $scriptDir/.mvn/wrapper/maven-wrapper.properties"
+}
+
+switch -wildcard -casesensitive ( $($distributionUrl -replace '^.*/','') ) {
+  "maven-mvnd-*" {
+    $USE_MVND = $true
+    $distributionUrl = $distributionUrl -replace '-bin\.[^.]*$',"-windows-amd64.zip"
+    $MVN_CMD = "mvnd.cmd"
+    break
+  }
+  default {
+    $USE_MVND = $false
+    $MVN_CMD = $script -replace '^mvnw','mvn'
+    break
+  }
+}
+
+# apply MVNW_REPOURL and calculate MAVEN_HOME
+# maven home pattern: ~/.m2/wrapper/dists/{apache-maven-<version>,maven-mvnd-<version>-<platform>}/<hash>
+if ($env:MVNW_REPOURL) {
+  $MVNW_REPO_PATTERN = if ($USE_MVND -eq $False) { "/org/apache/maven/" } else { "/maven/mvnd/" }
+  $distributionUrl = "$env:MVNW_REPOURL$MVNW_REPO_PATTERN$($distributionUrl -replace "^.*$MVNW_REPO_PATTERN",'')"
+}
+$distributionUrlName = $distributionUrl -replace '^.*/',''
+$distributionUrlNameMain = $distributionUrlName -replace '\.[^.]*$','' -replace '-bin$',''
+
+$MAVEN_M2_PATH = "$HOME/.m2"
+if ($env:MAVEN_USER_HOME) {
+  $MAVEN_M2_PATH = "$env:MAVEN_USER_HOME"
+}
+
+if (-not (Test-Path -Path $MAVEN_M2_PATH)) {
+    New-Item -Path $MAVEN_M2_PATH -ItemType Directory | Out-Null
+}
+
+$MAVEN_WRAPPER_DISTS = $null
+if ((Get-Item $MAVEN_M2_PATH).Target[0] -eq $null) {
+  $MAVEN_WRAPPER_DISTS = "$MAVEN_M2_PATH/wrapper/dists"
+} else {
+  $MAVEN_WRAPPER_DISTS = (Get-Item $MAVEN_M2_PATH).Target[0] + "/wrapper/dists"
+}
+
+$MAVEN_HOME_PARENT = "$MAVEN_WRAPPER_DISTS/$distributionUrlNameMain"
+$MAVEN_HOME_NAME = ([System.Security.Cryptography.SHA256]::Create().ComputeHash([byte[]][char[]]$distributionUrl) | ForEach-Object {$_.ToString("x2")}) -join ''
+$MAVEN_HOME = "$MAVEN_HOME_PARENT/$MAVEN_HOME_NAME"
+
+if (Test-Path -Path "$MAVEN_HOME" -PathType Container) {
+  Write-Verbose "found existing MAVEN_HOME at $MAVEN_HOME"
+  Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+  exit $?
+}
+
+if (! $distributionUrlNameMain -or ($distributionUrlName -eq $distributionUrlNameMain)) {
+  Write-Error "distributionUrl is not valid, must end with *-bin.zip, but found $distributionUrl"
+}
+
+# prepare tmp dir
+$TMP_DOWNLOAD_DIR_HOLDER = New-TemporaryFile
+$TMP_DOWNLOAD_DIR = New-Item -Itemtype Directory -Path "$TMP_DOWNLOAD_DIR_HOLDER.dir"
+$TMP_DOWNLOAD_DIR_HOLDER.Delete() | Out-Null
+trap {
+  if ($TMP_DOWNLOAD_DIR.Exists) {
+    try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+    catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+  }
+}
+
+New-Item -Itemtype Directory -Path "$MAVEN_HOME_PARENT" -Force | Out-Null
+
+# Download and Install Apache Maven
+Write-Verbose "Couldn't find MAVEN_HOME, downloading and installing it ..."
+Write-Verbose "Downloading from: $distributionUrl"
+Write-Verbose "Downloading to: $TMP_DOWNLOAD_DIR/$distributionUrlName"
+
+$webclient = New-Object System.Net.WebClient
+if ($env:MVNW_USERNAME -and $env:MVNW_PASSWORD) {
+  $webclient.Credentials = New-Object System.Net.NetworkCredential($env:MVNW_USERNAME, $env:MVNW_PASSWORD)
+}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$webclient.DownloadFile($distributionUrl, "$TMP_DOWNLOAD_DIR/$distributionUrlName") | Out-Null
+
+# If specified, validate the SHA-256 sum of the Maven distribution zip file
+$distributionSha256Sum = (Get-Content -Raw "$scriptDir/.mvn/wrapper/maven-wrapper.properties" | ConvertFrom-StringData).distributionSha256Sum
+if ($distributionSha256Sum) {
+  if ($USE_MVND) {
+    Write-Error "Checksum validation is not supported for maven-mvnd. `nPlease disable validation by removing 'distributionSha256Sum' from your maven-wrapper.properties."
+  }
+  Import-Module $PSHOME\Modules\Microsoft.PowerShell.Utility -Function Get-FileHash
+  if ((Get-FileHash "$TMP_DOWNLOAD_DIR/$distributionUrlName" -Algorithm SHA256).Hash.ToLower() -ne $distributionSha256Sum) {
+    Write-Error "Error: Failed to validate Maven distribution SHA-256, your Maven distribution might be compromised. If you updated your Maven version, you need to update the specified distributionSha256Sum property."
+  }
+}
+
+# unzip and move
+Expand-Archive "$TMP_DOWNLOAD_DIR/$distributionUrlName" -DestinationPath "$TMP_DOWNLOAD_DIR" | Out-Null
+
+# Find the actual extracted directory name (handles snapshots where filename != directory name)
+$actualDistributionDir = ""
+
+# First try the expected directory name (for regular distributions)
+$expectedPath = Join-Path "$TMP_DOWNLOAD_DIR" "$distributionUrlNameMain"
+$expectedMvnPath = Join-Path "$expectedPath" "bin/$MVN_CMD"
+if ((Test-Path -Path $expectedPath -PathType Container) -and (Test-Path -Path $expectedMvnPath -PathType Leaf)) {
+  $actualDistributionDir = $distributionUrlNameMain
+}
+
+# If not found, search for any directory with the Maven executable (for snapshots)
+if (!$actualDistributionDir) {
+  Get-ChildItem -Path "$TMP_DOWNLOAD_DIR" -Directory | ForEach-Object {
+    $testPath = Join-Path $_.FullName "bin/$MVN_CMD"
+    if (Test-Path -Path $testPath -PathType Leaf) {
+      $actualDistributionDir = $_.Name
+    }
+  }
+}
+
+if (!$actualDistributionDir) {
+  Write-Error "Could not find Maven distribution directory in extracted archive"
+}
+
+Write-Verbose "Found extracted Maven distribution directory: $actualDistributionDir"
+Rename-Item -Path "$TMP_DOWNLOAD_DIR/$actualDistributionDir" -NewName $MAVEN_HOME_NAME | Out-Null
+try {
+  Move-Item -Path "$TMP_DOWNLOAD_DIR/$MAVEN_HOME_NAME" -Destination $MAVEN_HOME_PARENT | Out-Null
+} catch {
+  if (! (Test-Path -Path "$MAVEN_HOME" -PathType Container)) {
+    Write-Error "fail to move MAVEN_HOME"
+  }
+} finally {
+  try { Remove-Item $TMP_DOWNLOAD_DIR -Recurse -Force | Out-Null }
+  catch { Write-Warning "Cannot remove $TMP_DOWNLOAD_DIR" }
+}
+
+Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
+</file>
+
+<file path="pom.xml">
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>org.boxing-god</groupId>
+    <artifactId>boxing_god_bot</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>boxing_god_bot</name>
+    <description>boxing_god_bot</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <spring-ai.version>1.0.0-M6</spring-ai.version>
+    </properties>
+
+    <dependencies>
+        <!-- Веб-стартер (нужен для работы RestClient в Spring AI) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Стартер Spring AI OpenAI (совместим с Groq) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Стартер для Telegram-бота -->
+        <dependency>
+            <groupId>org.telegram</groupId>
+            <artifactId>telegrambots-spring-boot-starter</artifactId>
+            <version>6.9.7.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.module</groupId>
+                    <artifactId>jackson-module-jaxb-annotations</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Тесты -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <repositories>
+        <!-- Репозиторий для выкачивания зависимостей Spring AI -->
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+</file>
+
+</files>
