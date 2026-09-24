@@ -2,67 +2,70 @@
 
 Java Spring Boot Spring AI Telegram
 
-An intelligent, AI-powered boxing match simulation game in Telegram. Simulate
-dream matchups between prime boxing legends, create and manage your own custom
-fighter, and place virtual bets on fight outcomes.
+Интеллектуальный симулятор боксерских поединков и мини-игра в Telegram на базе
+искусственного интеллекта. Моделируйте бои мечты между легендами бокса в их
+пиковой форме, создавайте и развивайте собственного бойца, а также делайте
+виртуальные ставки на исходы поединков.
 
-✨ Features
+✨ Возможности
 
-  - 🤖 Tactical AI Match Simulation
+  - 🤖 Тактическая ИИ-симуляция боев
 
-      - Realistic round-by-round breakdown (Rounds 1–4, 5–8, 9–12) factoring in
-        physical reach, speed, punching power, and signature punches.
-      - Accurate boxing stance dynamics: strict handling of Orthodox vs.
-        Southpaw angles, lead jabs, and power crosses.
-      - Free-form text input: enter any matchup directly (e.g., Mike Tyson vs
-        Muhammad Ali or Usyk vs Joshua).
+      - Реалистичный пошаговый разбор поединка по раундам (1–4, 5–8, 9–12) с
+        учетом габаритов, дистанции атаки (reach), скорости, нокаутирующей мощи
+        и коронных комбинаций.
+      - Точная боевая геометрия стоек: строгий учет противостояний «правша
+        против левши» (Orthodox vs. Southpaw), передней руки и силовых кроссов.
+      - Свободный текстовый ввод: отправляйте любую пару бойцов напрямую
+        (например, Майк Тайсон vs Мухаммед Али или Усик vs Джошуа).
 
-  - 🥊 "My Boxer" RPG Mode
+  - 🥊 RPG-режим «Мой боксер»
 
-      - Create and customize your fighter with 5 key attributes: Power, Speed,
-        Stamina, Chin, and Ring-IQ.
-      - Challenge over 100+ real-world boxing legends spanning all eras (from
-        the 1920s to modern champions).
-      - Track your fighter's career record (Wins / Losses) and earn coin rewards
-        for upset victories.
+      - Создание и кастомизация персонажа по 5 ключевым характеристикам: Сила,
+        Скорость, Выносливость, Челюсть и Ринг-IQ.
+      - Вызов на бой более 100+ реальных мировых легенд всех эпох (от 1920-х
+        годов до современных чемпионов).
+      - Ведение послужного списка побед и поражений (Record) с получением наград
+        за апсеты и сенсационные победы над фаворитами.
 
-  - 🎰 Virtual Betting Arena
+  - 🎰 Арена виртуальных ставок
 
-      - Every player starts with 1,000 coins.
-      - Place 100-coin bets on randomized legend fights with a 2x payout for
-        picking the winner.
+      - Каждый игрок начинает со стартовым капиталом в 1 000 монет.
+      - Делайте ставки по 100 монет на исход случайно сгенерированных боев
+        легенд с двойной выплатой (2x) за угаданного победителя.
 
-  - ⚡ Interactive UI & Extras
+  - ⚡ Интерактивный интерфейс и удобства
 
-      - Clean Telegram reply & inline keyboard menus.
-      - Instant Rematch and Random Fight actions.
-      - "🧹 Clean Chat" tool to purge recent messages and keep the interface
-        tidy.
+      - Удобное кнопочное меню (Reply и Inline-клавиатуры).
+      - Кнопки мгновенного запуска «Реванша» и «Случайного боя».
+      - Функция «🧹 Очистить чат» для быстрого удаления недавних сообщений бота и
+        поддержания порядка.
 
-  - 🔌 Built-in REST API
+  - 🔌 Встроенный REST API
 
-      - Fast test endpoint to simulate fights via HTTP without opening Telegram.
+      - Быстрый HTTP-эндпоинт для проверки генерации симуляции без необходимости
+        открывать Telegram.
 
-🛠 Tech Stack
+🛠 Стек технологий
 
-  - Language: Java 21
-  - Framework: Spring Boot 3.3.5
-  - AI Integration: Spring AI (compatible with OpenAI, Groq, or Ollama)
+  - Язык: Java 21
+  - Фреймворк: Spring Boot 3.3.5
+  - Интеграция с ИИ: Spring AI (совместимо с OpenAI, Groq или Ollama)
   - Telegram API: TelegramBots Spring Boot Starter
-  - Persistence: Spring Data JPA + H2 In-Memory Database
-  - Build Tool: Maven
+  - Хранение данных: Spring Data JPA + In-Memory база данных H2
+  - Сборка проекта: Maven
 
-🚀 Getting Started
+🚀 Установка и запуск
 
-1. Clone the Repository
+1. Клонирование репозитория
 
 git clone https://github.com/YOUR_USERNAME/boxing_god_bot.git
 cd boxing_god_bot
 
-2. Configure Environment Variables
+2. Настройка конфигурации
 
-Set your credentials in src/main/resources/application.yaml or export them as
-environment variables:
+Укажите ваши API-ключи и токен бота в файле src/main/resources/application.yaml
+или передайте их через переменные окружения:
 
 spring:
   application:
@@ -83,7 +86,7 @@ spring.datasource.url: jdbc:h2:mem:boxingdb
 spring.datasource.driverClassName: org.h2.Driver
 spring.jpa.hibernate.ddl-auto: update
 
-3. Run the Application
+3. Запуск приложения
 
 Linux / macOS:
 
@@ -93,21 +96,22 @@ Windows:
 
 mvnw.cmd clean spring-boot:run
 
-🌐 REST API Usage
+🌐 Использование REST API
 
-You can test the fight engine directly via HTTP:
+Вы можете протестировать генератор боев напрямую через HTTP-запрос:
 
-GET http://localhost:8080/api/fight?boxer1=Mike Tyson&boxer2=Muhammad Ali
+GET http://localhost:8080/api/fight?boxer1=Майк Тайсон&boxer2=Мухаммед Али
 
-📂 Project Structure
+📂 Структура проекта
 
 src/main/java/org/boxinggod/boxing_god_bot/
-├── config/         # Telegram Bot configuration
-├── controller/     # REST testing endpoints
-├── entity/         # JPA entities (AppUser, CustomBoxer, FightHistory)
-├── repository/     # Spring Data JPA repositories
-└── service/        # Spring AI simulation engine & user management
+├── config/         # Конфигурация Telegram-бота
+├── controller/     # REST-контроллеры для тестирования
+├── entity/         # Сущности JPA (AppUser, CustomBoxer, FightHistory)
+├── repository/     # Spring Data JPA репозитории
+└── service/        # Сервисы симуляции Spring AI и логика пользователей
 
-📄 License
+📄 Лицензия
 
-This project is open-source and available for educational and personal use.
+Проект имеет открытый исходный код и предназначен для образовательных и
+некоммерческих целей.
