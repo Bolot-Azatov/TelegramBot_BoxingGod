@@ -19,6 +19,6 @@ public class FightTestController {
             @RequestParam(defaultValue = "Майк Тайсон") String boxer1,
             @RequestParam(defaultValue = "Мухаммед Али") String boxer2
     ) {
-        return fightService.simulateFight(boxer1, boxer2);
+        return fightService.simulateFight(boxer1, boxer2).fullText();
     }
 }

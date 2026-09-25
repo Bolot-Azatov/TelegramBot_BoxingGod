@@ -133,7 +133,7 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
                 💰 **Баланс монет:** `%d` 🪙
                 🥊 **Проведено боев:** `%d`
                 """,
-                    user.getFirstName(), user.getBalance(), user.getTotalFights());
+                    escapeMarkdown(user.getFirstName()), user.getBalance(), user.getTotalFights());
             sendSimpleText(chatId, profileText);
             return;
         }
@@ -159,7 +159,7 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
 
         if (delimiter != null) {
             String[] boxers = userText.split("(?i)" + delimiter);
-            if (boxers.length == 2) {
+            if (boxers.length == 2 && !boxers[0].isBlank() && !boxers[1].isBlank()) {
                 runSimulation(chatId, boxers[0].trim(), boxers[1].trim(), 0);
                 return;
             }
@@ -188,12 +188,11 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
             
             _Выберите соперника по силам или отправьтесь в тренировочный лагерь!_
             """,
-                boxer.getName(), ovr,
+                escapeMarkdown(boxer.getName()), ovr,
                 boxer.getPower(), boxer.getSpeed(), boxer.getStamina(), boxer.getChin(), boxer.getRingIq(),
                 boxer.getWins(), boxer.getLosses(), balance
         );
 
-        // Подбираем соперников под текущий рейтинг боксёра
         List<String> opponents = getOpponentsForBoxer(ovr, 3);
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
@@ -251,11 +250,11 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
-        rows.add(List.of(createStatButton("💥 Сила (" + boxer.getPower() + ")", "UP_POWER")));
-        rows.add(List.of(createStatButton("⚡ Скорость (" + boxer.getSpeed() + ")", "UP_SPEED")));
-        rows.add(List.of(createStatButton("🫁 Кардио (" + boxer.getStamina() + ")", "UP_STAMINA")));
-        rows.add(List.of(createStatButton("🗿 Челюсть (" + boxer.getChin() + ")", "UP_CHIN")));
-        rows.add(List.of(createStatButton("🧠 Ринг-IQ (" + boxer.getRingIq() + ")", "UP_IQ")));
+        rows.add(List.of(createStatButton("💥 Сила", boxer.getPower(), "UP_POWER")));
+        rows.add(List.of(createStatButton("⚡ Скорость", boxer.getSpeed(), "UP_SPEED")));
+        rows.add(List.of(createStatButton("🫁 Кардио", boxer.getStamina(), "UP_STAMINA")));
+        rows.add(List.of(createStatButton("🗿 Челюсть", boxer.getChin(), "UP_CHIN")));
+        rows.add(List.of(createStatButton("🧠 Ринг-IQ", boxer.getRingIq(), "UP_IQ")));
 
         InlineKeyboardButton backBtn = new InlineKeyboardButton();
         backBtn.setText("⬅️ Назад в профиль");
@@ -273,10 +272,15 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
         executeAndTrack(message, chatId);
     }
 
-    private InlineKeyboardButton createStatButton(String text, String callbackData) {
+    private InlineKeyboardButton createStatButton(String title, int value, String callbackData) {
         InlineKeyboardButton btn = new InlineKeyboardButton();
-        btn.setText(text + " [+2] — " + TRAINING_COST + "🪙");
-        btn.setCallbackData(callbackData);
+        if (value >= 100) {
+            btn.setText(title + " [МАКС: 100]");
+            btn.setCallbackData("MAX_STAT");
+        } else {
+            btn.setText(title + " (" + value + ") [+2] — " + TRAINING_COST + "🪙");
+            btn.setCallbackData(callbackData);
+        }
         return btn;
     }
 
@@ -294,7 +298,6 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
     }
 
     private void prepareBetFight(long chatId) {
-        // Для ставок берём элитных бойцов из Тир 1 и Тир 2
         List<String> combined = new ArrayList<>(tier1Legends);
         combined.addAll(tier2Legends);
         Collections.shuffle(combined);
@@ -336,6 +339,11 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
         String data = update.getCallbackQuery().getData();
         long chatId = update.getCallbackQuery().getMessage().getChatId();
 
+        if (data.equals("MAX_STAT")) {
+            sendSimpleText(chatId, "ℹ️ Эта характеристика уже развита до абсолютного максимума (100)!");
+            return;
+        }
+
         if (data.equals("REFRESH_OPPONENTS") || data.equals("BACK_TO_PROFILE")) {
             userService.getCustomBoxer(chatId).ifPresent(boxer -> sendBoxerProfile(chatId, boxer));
             return;
@@ -376,7 +384,6 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
                 sendSimpleText(chatId, "⏳ *Твой боец " + myBoxer.getName() + " выходит в ринг против " + legendName + "...*");
                 try {
                     SimulationResult sim = fightService.simulateCustomFight(myBoxer, legendName);
-                    // 1 — кастомный боксёр, 2 — легенда
                     boolean won = (sim.winnerIndex() == 1);
                     userService.recordCustomFightResult(chatId, won);
 
@@ -390,7 +397,7 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
                             🪙 Текущий баланс: `%d` монет
                             """, balance));
                     } else {
-                        long balance = userService.awardWin(chatId, 50L); // Утешительный гонорар за бой
+                        long balance = userService.awardWin(chatId, 50L);
                         sendSimpleText(chatId, String.format("""
                             🥊 Твой боец уступил, но показал характер и заработал опыт!
                             💰 Гонорар за бой: **+50 монет** | Баланс: `%d` 🪙
@@ -428,11 +435,15 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
 
         if (data.equals("REMATCH")) {
             String lastPair = lastFights.get(chatId);
-            if (lastPair != null) {
+            if (lastPair != null && lastPair.contains(" vs ")) {
                 String[] boxers = lastPair.split(" vs ");
-                sendSimpleText(chatId, "🔄 *Запускаем реванш...*");
-                runSimulation(chatId, boxers[0], boxers[1], 0);
+                if (boxers.length == 2) {
+                    sendSimpleText(chatId, "🔄 *Запускаем реванш...*");
+                    runSimulation(chatId, boxers[0], boxers[1], 0);
+                    return;
+                }
             }
+            sendSimpleText(chatId, "⚠️ Данные о прошлом поединке устарели. Запустите новый бой из главного меню.");
         } else if (data.equals("RANDOM_FIGHT")) {
             triggerRandomFight(chatId);
         }
@@ -445,9 +456,6 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
         runSimulation(chatId, all.get(0), all.get(1), 0);
     }
 
-    /**
-     * @param chosenIndex 0 — без ставки, 1 — ставка на boxer1, 2 — ставка на boxer2
-     */
     private void runSimulation(long chatId, String boxer1, String boxer2, int chosenIndex) {
         lastFights.put(chatId, boxer1 + " vs " + boxer2);
 
@@ -457,13 +465,12 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
 
             sendFightResultWithButtons(chatId, result.fullText());
 
-            // Обработка выигрыша/проигрыша строго по номеру бойца (1 или 2)
             if (chosenIndex != 0) {
                 String chosenBoxerName = (chosenIndex == 1) ? boxer1 : boxer2;
                 boolean won = (result.winnerIndex() == chosenIndex);
 
                 if (won) {
-                    long newBalance = userService.awardWin(chatId, 200L); // 100 возврат + 100 чистый выигрыш
+                    long newBalance = userService.awardWin(chatId, 200L);
                     sendSimpleText(chatId, String.format("""
                         🎉 **ПОБЕДА СТАВКИ!**
                         Твой боец **%s** триумфально выиграл поединок!
@@ -510,7 +517,16 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
                 trackMessage(chatId, sent.getMessageId());
             }
         } catch (TelegramApiException e) {
-            log.error("Ошибка отправки сообщения", e);
+            // Защита от ошибок форматирования Markdown
+            message.enableMarkdown(false);
+            try {
+                Message sent = execute(message);
+                if (sent != null) {
+                    trackMessage(chatId, sent.getMessageId());
+                }
+            } catch (TelegramApiException ex) {
+                log.error("Ошибка отправки сообщения", ex);
+            }
         }
     }
 
@@ -615,25 +631,17 @@ public class BoxingTelegramBot extends TelegramLongPollingBot {
                     message.setReplyMarkup(markup);
                 }
 
-                try {
-                    Message sent = execute(message);
-                    if (sent != null) {
-                        trackMessage(chatId, sent.getMessageId());
-                    }
-                } catch (TelegramApiException e) {
-                    // Fallback без разметки Markdown, если LLM выдал некорректные спецсимволы
-                    message.enableMarkdown(false);
-                    try {
-                        Message sent = execute(message);
-                        if (sent != null) {
-                            trackMessage(chatId, sent.getMessageId());
-                        }
-                    } catch (TelegramApiException ex) {
-                        log.error("Ошибка отправки сообщения", ex);
-                    }
-                }
+                executeAndTrack(message, chatId);
             }
             start = end;
         }
+    }
+
+    private String escapeMarkdown(String text) {
+        if (text == null) return "";
+        return text.replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("[", "\\[")
+                .replace("`", "\\`");
     }
 }

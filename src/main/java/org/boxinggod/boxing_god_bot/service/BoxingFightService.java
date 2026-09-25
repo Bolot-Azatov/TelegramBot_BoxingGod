@@ -11,7 +11,11 @@ import java.util.regex.Pattern;
 public class BoxingFightService {
 
     private final ChatClient chatClient;
-    private static final Pattern RESULT_PATTERN = Pattern.compile("RESULT_WINNER:\\s*([12])");
+
+    // Устойчивый regex: понимает **RESULT_WINNER: 1**, RESULT_WINNER: [2], result_winner : 1 и т.д.
+    private static final Pattern RESULT_PATTERN = Pattern.compile(
+            "(?i)\\*?RESULT_WINNER\\s*:\\s*\\*?\\[?\\s*([12])\\s*\\]?\\*?"
+    );
 
     public record SimulationResult(String fullText, int winnerIndex) {}
 
@@ -118,18 +122,20 @@ public class BoxingFightService {
     }
 
     private SimulationResult parseResponse(String rawResponse) {
-        if (rawResponse == null) {
-            return new SimulationResult("Ошибка симуляции", 1);
+        if (rawResponse == null || rawResponse.isBlank()) {
+            return new SimulationResult("Ошибка симуляции: пустой ответ от ИИ.", 1);
         }
 
         Matcher matcher = RESULT_PATTERN.matcher(rawResponse);
         int winner = 1;
         if (matcher.find()) {
-            winner = Integer.parseInt(matcher.group(1));
+            try {
+                winner = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException ignored) {}
         }
 
-        // Очищаем технический тег из сообщения, чтобы пользователь его не видел
-        String cleanText = rawResponse.replaceAll("RESULT_WINNER:\\s*[12]", "").trim();
+        // Очищаем технический тег из сообщения
+        String cleanText = rawResponse.replaceAll("(?i)\\*?RESULT_WINNER\\s*:\\s*\\*?\\[?\\s*[12]\\s*\\]?\\*?", "").trim();
         return new SimulationResult(cleanText, winner);
     }
 }
