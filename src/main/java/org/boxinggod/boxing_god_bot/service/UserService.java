@@ -46,11 +46,11 @@ public class UserService {
                 .name(name)
                 .stance("Правша")
                 .style("Сбалансированный боксер-панчер")
-                .power(80)
-                .speed(80)
-                .stamina(80)
-                .chin(80)
-                .ringIq(80)
+                .power(68)
+                .speed(70)
+                .stamina(70)
+                .chin(68)
+                .ringIq(68)
                 .wins(0)
                 .losses(0)
                 .build();
@@ -110,5 +110,42 @@ public class UserService {
                 .simulationResult(result)
                 .build();
         historyRepository.save(history);
+    }
+
+    @Transactional
+    public boolean upgradeStat(Long chatId, String statName, int cost) {
+        AppUser user = userRepository.findById(chatId).orElse(null);
+        CustomBoxer boxer = boxerRepository.findByChatId(chatId).orElse(null);
+
+        if (user == null || boxer == null || user.getBalance() < cost) {
+            return false;
+        }
+
+        boolean upgraded = false;
+        switch (statName.toLowerCase()) {
+            case "power" -> {
+                if (boxer.getPower() < 100) { boxer.setPower(boxer.getPower() + 2); upgraded = true; }
+            }
+            case "speed" -> {
+                if (boxer.getSpeed() < 100) { boxer.setSpeed(boxer.getSpeed() + 2); upgraded = true; }
+            }
+            case "stamina" -> {
+                if (boxer.getStamina() < 100) { boxer.setStamina(boxer.getStamina() + 2); upgraded = true; }
+            }
+            case "chin" -> {
+                if (boxer.getChin() < 100) { boxer.setChin(boxer.getChin() + 2); upgraded = true; }
+            }
+            case "iq" -> {
+                if (boxer.getRingIq() < 100) { boxer.setRingIq(boxer.getRingIq() + 2); upgraded = true; }
+            }
+        }
+
+        if (upgraded) {
+            user.setBalance(user.getBalance() - cost);
+            userRepository.save(user);
+            boxerRepository.save(boxer);
+            return true;
+        }
+        return false;
     }
 }
